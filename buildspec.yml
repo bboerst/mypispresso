@@ -12,7 +12,7 @@ phases:
   post_build:
     commands:
       - echo Logging in to Docker Hub...
-      - docker login --username=\"$DOCKER_HUB_USERNAME\" --password=\"$DOCKER_HUB_PASSWORD\"
+      - docker login -u $DOCKER_HUB_USERNAME -p $DOCKER_HUB_PASSWORD
       - echo Build completed on `date`
       - echo Pushing the Docker image...
       - docker push $IMAGE_REPO_NAME:$IMAGE_TAG
