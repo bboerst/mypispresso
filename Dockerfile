@@ -1,6 +1,17 @@
 FROM hypriot/rpi-alpine
 
-RUN apk add --no-cache linux-headers gcc musl-dev jpeg-dev zlib-dev freetype-dev
+RUN apk add \
+	linux-headers \
+	gcc \
+	musl-dev \
+	jpeg-dev \
+	zlib-dev \
+	freetype-dev \
+	python \
+    python-dev \
+    py-pip \
+    build-base \
+  && rm -rf /var/cache/apk/*
 
 WORKDIR /usr/src/app
 
