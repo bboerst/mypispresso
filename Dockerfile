@@ -1,16 +1,6 @@
-FROM hypriot/rpi-alpine
+FROM bboerst/rpi-qemu-alpine-python:2
 
-RUN apk add \
-	linux-headers \
-	gcc \
-	musl-dev \
-	jpeg-dev \
-	zlib-dev \
-	freetype-dev \
-	python \
-    python-dev \
-    py-pip \
-  && rm -rf /var/cache/apk/*
+RUN apk add --no-cache linux-headers gcc musl-dev jpeg-dev zlib-dev freetype-dev
 
 WORKDIR /usr/src/app
 
