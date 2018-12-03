@@ -1,4 +1,4 @@
-FROM arm32v6/python:2-alpine
+FROM hypriot/rpi-alpine
 
 RUN apk add --no-cache linux-headers gcc musl-dev jpeg-dev zlib-dev freetype-dev
 
