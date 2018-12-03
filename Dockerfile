@@ -10,7 +10,6 @@ RUN apk add \
 	python \
     python-dev \
     py-pip \
-    build-base \
   && rm -rf /var/cache/apk/*
 
 WORKDIR /usr/src/app
