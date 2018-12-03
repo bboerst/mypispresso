@@ -7,11 +7,12 @@ RUN apk add --no-cache \
 	jpeg-dev \
 	zlib-dev \
 	freetype-dev \
+	py-pillow \
 	py-numpy
 
 WORKDIR /usr/src/app
 
-RUN pip install --no-cache-dir rpi.gpio spidev pillow
+RUN pip install --no-cache-dir rpi.gpio spidev
 
 COPY . ./
 
