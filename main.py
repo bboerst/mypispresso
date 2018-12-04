@@ -187,7 +187,7 @@ if __name__ == '__main__':
         # call(["modprobe", "w1-therm"])
         # call(["modprobe", "i2c-dev"])
 
-        if !__debug__:
+        if not __debug__:
             try:
                 onewire_base_dir = glob.glob(onewire_base_dir + '28*')[0]
             except:
