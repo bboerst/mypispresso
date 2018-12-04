@@ -26,6 +26,7 @@ onewire_base_dir = '/sys/bus/w1/devices/'
 
 class mem:
     lcd_connection = Pipe()
+    lcd_base_image = Image()
     one_wire = None
 
 
@@ -79,7 +80,7 @@ def read_temp_raw():
     return lines
 
 
-def read_temp():
+def gettempProc():
     lines = read_temp_raw()
     while lines[0].strip()[-3:] != 'YES':
         time.sleep(0.2)
@@ -89,7 +90,45 @@ def read_temp():
         temp_string = lines[1][equals_pos+2:]
         temp_c = float(temp_string) / 1000.0
         temp_f = temp_c * 9.0 / 5.0 + 32.0
-        return temp_f
+        return str(int(temp_f))
+
+
+def lcdpainterproc(lcd_child_conn):
+    p = current_process()
+    logger = logging.getLogger("mypispresso").getChild("lcdpainterproc")
+    logger.info('Starting:' + p.name + ":" + str(p.pid))
+
+    lcd = LCD_1in44.LCD()
+
+    # Init LCD
+    lcd_scandir = LCD_1in44.SCAN_DIR_DFT  # SCAN_DIR_DFT = D2U_L2R
+    lcd.LCD_Init(lcd_scandir)
+
+    background = Image.new("RGB", (lcd.width, lcd.height), "BLACK")
+    power_icon = Image.open('lcd/power_icon.png').convert('RGBA').resize((18, 18))
+    brew_icon = Image.open('lcd/coffee_cup_icon.png').convert('RGBA').resize((18, 18))
+    steam_icon = Image.open('lcd/steam_icon.jpg').convert('RGB').resize((18, 18))
+    inverted_steam_icon = ImageOps.invert(steam_icon)  # Inverts black to white
+
+    background.paste(power_icon, (1, 24))
+    background.paste(brew_icon, (1, 54))
+    background.paste(inverted_steam_icon, (1, 84))
+    background = background.rotate(180)
+
+    temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 45)
+    timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 20)
+
+    try:
+        while (True):
+            time.sleep(0.5)
+            draw = ImageDraw.Draw(background)
+            draw.text((35, 1), gettempProc() + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
+            draw.text((65, 105), "00 sec", font=timer_font, fill="WHITE")
+            lcd.LCD_ShowImage(background, 0, 0)
+            LCD_Config.Driver_Delay_ms(500)
+    except:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
 def catchButton(btn):
@@ -135,36 +174,11 @@ if __name__ == '__main__':
         GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
-        lcd = LCD_1in44.LCD()
+        lcd_parent_conn, lcd_child_conn = Pipe()
+        mem.lcd_connection = lcd_parent_conn
 
-        # Init LCD
-        lcd_scandir = LCD_1in44.SCAN_DIR_DFT  # SCAN_DIR_DFT = D2U_L2R
-        lcd.LCD_Init(lcd_scandir)
-
-        while (True):
-            background = Image.new("RGB", (lcd.width, lcd.height), "BLACK")
-            power_icon = Image.open('lcd/power_icon.png').convert('RGBA').resize((18,18))
-            brew_icon = Image.open('lcd/coffee_cup_icon.png').convert('RGBA').resize((18,18))
-            steam_icon = Image.open('lcd/steam_icon.jpg').convert('RGB').resize((18,18))
-            inverted_steam_icon = ImageOps.invert(steam_icon)  # Inverts black to white
-
-            draw = ImageDraw.Draw(background)
-
-            background.paste(power_icon, (1, 24))
-            background.paste(brew_icon, (1, 54))
-            background.paste(inverted_steam_icon, (1, 84))
-
-            temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 45)
-            draw.text((35, 1), str(int(read_temp())) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
-
-            timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 20)
-            draw.text((65, 105), "00 sec", font=timer_font, fill="WHITE")
-
-            rotated_image = background.rotate(180)
-            lcd.LCD_ShowImage(rotated_image, 0, 0)
-            LCD_Config.Driver_Delay_ms(500)
-
-            time.sleep(1)
+        lcdpainterproc = Process(name="lcdpainterproc", target=lcdpainterproc, args=(lcd_child_conn,))
+        lcdpainterproc.start()
 
     except KeyboardInterrupt:
         cleanup()
