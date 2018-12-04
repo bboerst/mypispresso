@@ -2,10 +2,12 @@ from lcd import LCD_1in44, LCD_Config
 from PIL import Image, ImageDraw, ImageOps, ImageFont, ImageColor
 
 import os, logging, sys, traceback, glob
+from random import randint
 import multiprocessing
 from multiprocessing import Process, Pipe, Queue, Value, current_process
 from subprocess import Popen, PIPE, call, signal
 import time
+
 import RPi.GPIO as GPIO
 
 gpio_heat = 4
@@ -82,6 +84,9 @@ def read_temp_raw():
 
 
 def gettemp():
+    if __debug__:
+        return randint(100, 300)
+
     lines = read_temp_raw()
     while lines[0].strip()[-3:] != 'YES':
         time.sleep(0.2)
