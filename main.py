@@ -26,7 +26,8 @@ onewire_base_dir = '/sys/bus/w1/devices/'
 
 class mem:
     lcd_connection = Pipe()
-    lcd_base_image = Image()
+    temp_connection = Pipe()
+    temp = 0
     one_wire = None
 
 
@@ -80,7 +81,7 @@ def read_temp_raw():
     return lines
 
 
-def gettempProc():
+def gettemp():
     lines = read_temp_raw()
     while lines[0].strip()[-3:] != 'YES':
         time.sleep(0.2)
@@ -90,7 +91,22 @@ def gettempProc():
         temp_string = lines[1][equals_pos+2:]
         temp_c = float(temp_string) / 1000.0
         temp_f = temp_c * 9.0 / 5.0 + 32.0
-        return str(int(temp_f))
+        return int(temp_f)
+
+
+def tempupdateproc(temp_child_conn):
+    p = current_process()
+    logger = logging.getLogger("mypispresso").getChild("tempupdateproc")
+    logger.info('Starting:' + p.name + ":" + str(p.pid))
+
+    try:
+        while (True):
+            time.sleep(1)
+            current_temp = gettemp()
+            mem.temp = current_temp
+    except:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
 def lcdpainterproc(lcd_child_conn):
@@ -113,19 +129,21 @@ def lcdpainterproc(lcd_child_conn):
     background.paste(power_icon, (1, 24))
     background.paste(brew_icon, (1, 54))
     background.paste(inverted_steam_icon, (1, 84))
-    background = background.rotate(180)
 
     temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 45)
     timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 20)
 
     try:
         while (True):
-            time.sleep(0.5)
-            draw = ImageDraw.Draw(background)
-            draw.text((35, 1), gettempProc() + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
+            time.sleep(1)
+            background_cycle = background.copy()
+            draw = ImageDraw.Draw(background_cycle)
+            draw.text((35, 1), str(mem.temp) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
             draw.text((65, 105), "00 sec", font=timer_font, fill="WHITE")
-            lcd.LCD_ShowImage(background, 0, 0)
+            background_cycle = background_cycle.rotate(180)
+            lcd.LCD_ShowImage(background_cycle, 0, 0)
             LCD_Config.Driver_Delay_ms(500)
+            background_cycle = None
     except:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
@@ -174,11 +192,17 @@ if __name__ == '__main__':
         GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
+        # LCD Painting Loop
         lcd_parent_conn, lcd_child_conn = Pipe()
         mem.lcd_connection = lcd_parent_conn
-
         lcdpainterproc = Process(name="lcdpainterproc", target=lcdpainterproc, args=(lcd_child_conn,))
         lcdpainterproc.start()
+
+        # Temperature Update Loop
+        temp_parent_conn, temp_child_conn = Pipe()
+        mem.temp_connection = temp_parent_conn
+        tempupdateproc = Process(name="tempupdateproc", target=tempupdateproc, args=(temp_child_conn,))
+        tempupdateproc.start()
 
     except KeyboardInterrupt:
         cleanup()
