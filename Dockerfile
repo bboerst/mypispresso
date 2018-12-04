@@ -8,7 +8,7 @@ RUN apk add --no-cache \
 	zlib-dev \
 	freetype-dev \
 	py-pillow \
-	py-numpy
+	py2-numpy@community
 
 WORKDIR /usr/src/app
 
