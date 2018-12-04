@@ -187,12 +187,13 @@ if __name__ == '__main__':
         # call(["modprobe", "w1-therm"])
         # call(["modprobe", "i2c-dev"])
 
-        try:
-            onewire_base_dir = glob.glob(onewire_base_dir + '28*')[0]
-        except:
-            logger.error("1-Wire Temp sensor not found in " + onewire_base_dir)
+        if !__debug__:
+            try:
+                onewire_base_dir = glob.glob(onewire_base_dir + '28*')[0]
+            except:
+                logger.error("1-Wire Temp sensor not found in " + onewire_base_dir)
 
-        mem.one_wire = onewire_base_dir + '/w1_slave'
+            mem.one_wire = onewire_base_dir + '/w1_slave'
 
         GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
