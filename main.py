@@ -7,6 +7,7 @@ import multiprocessing
 from multiprocessing import Process, Pipe, Queue, Value, Lock, current_process
 from subprocess import Popen, PIPE, call, signal
 import time
+from functools import partial
 
 import RPi.GPIO as GPIO
 
@@ -143,14 +144,12 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def catchButton(btn):
+def catchButton(btn, heat_is_on):
     try:
         time.sleep(0.05)
-        if GPIO.input(btn) != GPIO.HIGH:  # check to see if the input button is still high, protect against EMI false positive
-            return
 
         if btn == gpio_btn_heat_sig:
-            logger.debug("catchButton: Heat ON")
+            heat_is_on.value = True
 
         elif btn == gpio_btn_pump_sig:
             logger.debug("catchButton: Pump ON")
@@ -170,9 +169,6 @@ def cleanup():
 if __name__ == '__main__':
     try:
         logger_init()
-
-        GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
-        GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
         # Heat is on
         heat_is_on = Value('b', False)
@@ -198,6 +194,9 @@ if __name__ == '__main__':
         timerupdateproc.join()
         tempupdateproc.join()
         lcdpainterproc.join()
+
+        GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=lambda x: catchButton(gpio_btn_heat_sig, heat_is_on), bouncetime=200)
+        GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
     except KeyboardInterrupt:
         cleanup()
