@@ -200,12 +200,13 @@ if __name__ == '__main__':
 
         # LCD Painting Loop
         lcdpainterproc = Process(name="lcdpainterproc", target=lcdpainterproc, args=(curr_temp,))
-        lcdpainterproc.start()
-        lcdpainterproc.join()
-
+        
         # Temperature Update Loop
         tempupdateproc = Process(name="tempupdateproc", target=tempupdateproc, args=(curr_temp, temp_lock))
+
+        lcdpainterproc.start()
         tempupdateproc.start()
+        lcdpainterproc.join()
         tempupdateproc.join()
 
     except KeyboardInterrupt:
