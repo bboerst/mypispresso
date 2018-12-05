@@ -129,7 +129,7 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
             time.sleep(0.5)
             background_cycle = background.copy()
             draw = ImageDraw.Draw(background_cycle)
-            draw.text((90, 1), str(temp.value) + u'\N{DEGREE SIGN}', align="right", font=temp_font, fill="RED" if heat_is_on.value else "GRAY")
+            draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', align="right", font=temp_font, fill="RED" if heat_is_on.value else "GRAY")
 
             if timer_is_on.value:
                 draw.text((40, 25), str(timer.value), align="center", font=timer_font, fill="YELLOW")
