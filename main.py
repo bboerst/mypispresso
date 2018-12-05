@@ -24,6 +24,10 @@ GPIO.setup(gpio_btn_pump_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
 logger = logging.getLogger()
 
+detachedmode = False
+if("--detached" in  sys.argv):
+    detachedmode = True
+
 
 def logger_init():
     handler = logging.StreamHandler(sys.stdout)
@@ -33,39 +37,6 @@ def logger_init():
     logger.addHandler(handler)
     logger.info('******************************************')
     logger.info('Starting up...')
-
-
-def test_lcd():
-    lcd = LCD_1in44.LCD()
-
-    # Init LCD
-    lcd_scandir = LCD_1in44.SCAN_DIR_DFT  # SCAN_DIR_DFT = D2U_L2R
-    lcd.LCD_Init(lcd_scandir)
-
-    image = Image.new("RGB", (lcd.width, lcd.height), "WHITE")
-    draw = ImageDraw.Draw(image)
-
-    # font = ImageFont.truetype('/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf', 16)
-
-    # draw line
-    #draw.line([(0, 0), (127, 0)], fill="BLUE", width=5)
-    #draw.line([(127, 0), (127, 127)], fill="BLUE", width=5)
-    #draw.line([(127, 127), (0, 127)], fill="BLUE", width=5)
-    #draw.line([(0, 127), (0, 0)], fill="BLUE", width=5)
-
-    # draw rectangle
-    #draw.rectangle([(18, 10), (110, 20)], fill="RED")
-
-    # draw text
-    draw.text((33, 22), 'WaveShare ', fill="BLUE")
-    draw.text((32, 36), 'Electronic ', fill="BLUE")
-    draw.text((28, 48), '1.44inch LCD ', fill="BLUE")
-
-    lcd.LCD_ShowImage(image, 0, 0)
-    LCD_Config.Driver_Delay_ms(500)
-
-    #image = Image.open('time.bmp')
-    #lcd.LCD_ShowImage(image, 0, 0)
 
 
 def timerupdateproc(timer_is_on, timer, lock):
@@ -98,7 +69,8 @@ def read_temp_raw():
 
 
 def gettemp():
-    # return randint(100, 300)
+    if detachedmode:
+        return randint(199, 204)
 
     lines = read_temp_raw()
     while lines[0].strip()[-3:] != 'YES':
@@ -198,11 +170,6 @@ def cleanup():
 if __name__ == '__main__':
     try:
         logger_init()
-        #test_lcd()
-
-        # call(["modprobe", "w1-gpio"])
-        # call(["modprobe", "w1-therm"])
-        # call(["modprobe", "i2c-dev"])
 
         GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
