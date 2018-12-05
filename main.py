@@ -23,11 +23,6 @@ GPIO.setup(gpio_btn_heat_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(gpio_btn_pump_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
 logger = logging.getLogger()
-onewire_base_dir = '/sys/bus/w1/devices/'
-
-
-class mem:
-    one_wire = None
 
 
 def logger_init():
@@ -73,8 +68,30 @@ def test_lcd():
     #lcd.LCD_ShowImage(image, 0, 0)
 
 
+def timerupdateproc(timer_is_on, timer, lock):
+    p = current_process()
+    logger = logging.getLogger("mypispresso").getChild("tempupdateproc")
+    logger.info('Starting:' + p.name + ":" + str(p.pid))
+
+    try:
+        while (True):
+            if timer_is_on.value:
+                time.sleep(1)
+                with lock:
+                    timer.value += 1
+            else:
+                timer.value = 0
+    except:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+
+
 def read_temp_raw():
-    f = open(mem.one_wire, 'r')
+    onewire_base_dir = '/sys/bus/w1/devices/'
+    onewire_base_dir = glob.glob(onewire_base_dir + '28*')[0]
+    onewire_base_dir = onewire_base_dir + '/w1_slave'
+
+    f = open(onewire_base_dir, 'r')
     lines = f.readlines()
     f.close()
     return lines
@@ -111,7 +128,7 @@ def tempupdateproc(temp, lock):
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def lcdpainterproc(temp):
+def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
     p = current_process()
     logger = logging.getLogger("mypispresso").getChild("lcdpainterproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
@@ -132,16 +149,19 @@ def lcdpainterproc(temp):
     background.paste(brew_icon, (1, 54))
     background.paste(inverted_steam_icon, (1, 84))
 
-    temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 45)
-    timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 20)
+    temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 25)
+    timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 60)
 
     try:
         while (True):
-            time.sleep(1)
+            time.sleep(0.5)
             background_cycle = background.copy()
             draw = ImageDraw.Draw(background_cycle)
-            draw.text((35, 1), str(temp.value) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
-            draw.text((65, 105), "00 sec", font=timer_font, fill="WHITE")
+            draw.text((90, 1), str(temp.value) + u'\N{DEGREE SIGN}', align="right", font=temp_font, fill="RED" if heat_is_on.value else "GRAY")
+
+            if timer_is_on.value:
+                draw.text((40, 25), str(timer.value), align="center", font=timer_font, fill="YELLOW")
+
             background_cycle = background_cycle.rotate(180)
             lcd.LCD_ShowImage(background_cycle, 0, 0)
             LCD_Config.Driver_Delay_ms(500)
@@ -184,30 +204,33 @@ if __name__ == '__main__':
         # call(["modprobe", "w1-therm"])
         # call(["modprobe", "i2c-dev"])
 
-        if not __debug__:
-            try:
-                onewire_base_dir = glob.glob(onewire_base_dir + '28*')[0]
-            except:
-                logger.error("1-Wire Temp sensor not found in " + onewire_base_dir)
-
-            mem.one_wire = onewire_base_dir + '/w1_slave'
-
         GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
+        # Heat is on
+        heat_is_on = Value('b', False)
+
+        # Timer Update Loop
+        timer_is_on = Value('b', True)
+        timer_secs = Value('i', 0)
+        timer_lock = Lock()
+        timerupdateproc = Process(target=timerupdateproc, args=(timer_is_on, timer_secs, timer_lock))
+
+        # Temperature Update Loop
         curr_temp = Value('i', 0)
         temp_lock = Lock()
+        tempupdateproc = Process(target=tempupdateproc, args=(curr_temp, temp_lock))
 
         # LCD Painting Loop
-        lcdpainterproc = Process(name="lcdpainterproc", target=lcdpainterproc, args=(curr_temp,))
-        
-        # Temperature Update Loop
-        tempupdateproc = Process(name="tempupdateproc", target=tempupdateproc, args=(curr_temp, temp_lock))
+        lcdpainterproc = Process(target=lcdpainterproc, args=(curr_temp, timer_secs, heat_is_on, timer_is_on))
 
-        lcdpainterproc.start()
+        timerupdateproc.start()
         tempupdateproc.start()
-        lcdpainterproc.join()
+        lcdpainterproc.start()
+
+        timerupdateproc.join()
         tempupdateproc.join()
+        lcdpainterproc.join()
 
     except KeyboardInterrupt:
         cleanup()
