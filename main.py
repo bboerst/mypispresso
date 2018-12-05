@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw, ImageOps, ImageFont, ImageColor
 import os, logging, sys, traceback, glob
 from random import randint
 import multiprocessing
-from multiprocessing import Process, Pipe, Queue, Value, current_process
+from multiprocessing import Process, Pipe, Queue, Value, Lock, current_process
 from subprocess import Popen, PIPE, call, signal
 import time
 
@@ -140,7 +140,7 @@ def lcdpainterproc(temp):
             time.sleep(1)
             background_cycle = background.copy()
             draw = ImageDraw.Draw(background_cycle)
-            draw.text((35, 1), str(mem.temp) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
+            draw.text((35, 1), str(temp.value) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
             draw.text((65, 105), "00 sec", font=timer_font, fill="WHITE")
             background_cycle = background_cycle.rotate(180)
             lcd.LCD_ShowImage(background_cycle, 0, 0)
