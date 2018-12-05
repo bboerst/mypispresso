@@ -27,9 +27,6 @@ onewire_base_dir = '/sys/bus/w1/devices/'
 
 
 class mem:
-    lcd_connection = Pipe()
-    temp_connection = Pipe()
-    temp = 0
     one_wire = None
 
 
@@ -84,8 +81,7 @@ def read_temp_raw():
 
 
 def gettemp():
-    if __debug__:
-        return randint(100, 300)
+    # return randint(100, 300)
 
     lines = read_temp_raw()
     while lines[0].strip()[-3:] != 'YES':
@@ -99,7 +95,7 @@ def gettemp():
         return int(temp_f)
 
 
-def tempupdateproc(temp_child_conn):
+def tempupdateproc(temp, lock):
     p = current_process()
     logger = logging.getLogger("mypispresso").getChild("tempupdateproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
@@ -108,13 +104,14 @@ def tempupdateproc(temp_child_conn):
         while (True):
             time.sleep(1)
             current_temp = gettemp()
-            mem.temp = current_temp
+            with lock:
+                temp.value = current_temp
     except:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def lcdpainterproc(lcd_child_conn):
+def lcdpainterproc(temp):
     p = current_process()
     logger = logging.getLogger("mypispresso").getChild("lcdpainterproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
@@ -198,17 +195,18 @@ if __name__ == '__main__':
         GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
+        curr_temp = Value('i', 0)
+        temp_lock = Lock()
+
         # LCD Painting Loop
-        lcd_parent_conn, lcd_child_conn = Pipe()
-        mem.lcd_connection = lcd_parent_conn
-        lcdpainterproc = Process(name="lcdpainterproc", target=lcdpainterproc, args=(lcd_child_conn,))
+        lcdpainterproc = Process(name="lcdpainterproc", target=lcdpainterproc, args=(curr_temp,))
         lcdpainterproc.start()
+        lcdpainterproc.join()
 
         # Temperature Update Loop
-        temp_parent_conn, temp_child_conn = Pipe()
-        mem.temp_connection = temp_parent_conn
-        tempupdateproc = Process(name="tempupdateproc", target=tempupdateproc, args=(temp_child_conn,))
+        tempupdateproc = Process(name="tempupdateproc", target=tempupdateproc, args=(curr_temp, temp_lock))
         tempupdateproc.start()
+        tempupdateproc.join()
 
     except KeyboardInterrupt:
         cleanup()
