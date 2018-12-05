@@ -144,15 +144,10 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def catchButton(btn, heat_is_on):
+def heatButtonPress(heat_is_on):
     try:
         time.sleep(0.05)
-
-        if btn == gpio_btn_heat_sig:
-            heat_is_on.value = True
-
-        elif btn == gpio_btn_pump_sig:
-            logger.debug("catchButton: Pump ON")
+        heat_is_on.value = True
 
     except:
         exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -195,7 +190,7 @@ if __name__ == '__main__':
         tempupdateproc.join()
         lcdpainterproc.join()
 
-        GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=lambda x: catchButton(gpio_btn_heat_sig, heat_is_on), bouncetime=200)
+        GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=lambda x: heatButtonPress(heat_is_on), bouncetime=200)
         GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
 
     except KeyboardInterrupt:
