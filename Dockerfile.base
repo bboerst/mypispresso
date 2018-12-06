@@ -1,5 +1,5 @@
 # Manually built and pushed Docker Hub as bboerst/rpi-qemu-alpine-python
-FROM arm32v6/python:alpine
+FROM arm32v6/python:2-alpine
 
 RUN apk add --no-cache \
 	curl \
@@ -13,7 +13,7 @@ RUN apk add --no-cache \
 RUN curl -L -o /usr/bin/qemu-arm-static https://github.com/multiarch/qemu-user-static/releases/download/v3.0.0/qemu-arm-static \
     && chmod +x /usr/bin/qemu-*
 
-RUN pip install --no-cache-dir rpi.gpio spidev numpy pillow multiprocessing-logging
+RUN pip install --no-cache-dir rpi.gpio spidev numpy pillow
 
 CMD ["python"]
 
