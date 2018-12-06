@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw, ImageOps, ImageFont, ImageColor
 import os, logging, sys, traceback, glob
 from random import randint
 import multiprocessing
-from multiprocessing import Process, Pipe, Queue, Value, Lock, current_process
+from multiprocessing import Process, Pipe, Queue, Event, Value, Lock, current_process
 from subprocess import Popen, PIPE, call, signal
 import time
 from functools import partial
@@ -13,15 +13,18 @@ import RPi.GPIO as GPIO
 
 gpio_heat = 4
 gpio_pump = 17
-gpio_btn_heat_sig = 21
-gpio_btn_pump_sig = 20
+
+gpio_btn_power = 16
+gpio_btn_brew = 20
+gpio_btn_steam = 21
 
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(gpio_heat, GPIO.OUT)
 GPIO.setup(gpio_pump, GPIO.OUT)
-GPIO.setup(gpio_btn_heat_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-GPIO.setup(gpio_btn_pump_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(gpio_btn_power, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(gpio_btn_brew, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(gpio_btn_steam, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 logger = logging.getLogger()
 
@@ -31,12 +34,21 @@ if("--detached" in  sys.argv):
 
 
 def logger_init():
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+
+    # create console handler and set level to debug
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    # create formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.info('******************************************')
+
+    # add formatter to ch
+    ch.setFormatter(formatter)
+
+    # add ch to logger
+    logger.addHandler(ch)
+
     logger.info('Starting up...')
 
 
@@ -52,7 +64,7 @@ def timerupdateproc(timer_is_on, timer, lock):
                 with lock:
                     timer.value += 1
             else:
-                timer.value = 0
+                timer.value = 1
     except:
         exc_type, exc_value, exc_traceback = sys.exc_info()
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
@@ -101,7 +113,7 @@ def tempupdateproc(temp, lock):
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
+def lcdpainterproc(temp, timer, heat_is_on, timer_is_on, power_button_press, brew_button_press, steam_button_press):
     p = current_process()
     logger = logging.getLogger("mypispresso").getChild("lcdpainterproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
@@ -113,14 +125,13 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
     lcd.LCD_Init(lcd_scandir)
 
     background = Image.new("RGB", (lcd.width, lcd.height), "BLACK")
-    power_icon = Image.open('lcd/power_icon.png').convert('RGBA').resize((18, 18))
-    brew_icon = Image.open('lcd/coffee_cup_icon.png').convert('RGBA').resize((18, 18))
-    steam_icon = Image.open('lcd/steam_icon.jpg').convert('RGB').resize((18, 18))
-    inverted_steam_icon = ImageOps.invert(steam_icon)  # Inverts black to white
-
-    background.paste(power_icon, (1, 24))
-    background.paste(brew_icon, (1, 54))
-    background.paste(inverted_steam_icon, (1, 84))
+    # gaggia_logo = Image.open('lcd/gaggia.png').convert('RGBA').resize((80, 121))
+    power_on_icon = Image.open('lcd/power_button_on.png').convert('RGBA').resize((18, 18))
+    power_off_icon = Image.open('lcd/power_button_off.png').convert('RGBA').resize((18, 18))
+    brew_on_icon = Image.open('lcd/brew_button_on.png').convert('RGBA').resize((18, 18))
+    brew_off_icon = Image.open('lcd/brew_button_off.png').convert('RGBA').resize((18, 18))
+    steam_on_icon = Image.open('lcd/steam_button_on.png').convert('RGB').resize((18, 18))
+    steam_off_icon = Image.open('lcd/steam_button_off.png').convert('RGB').resize((18, 18))
 
     temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 25)
     timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 60)
@@ -130,10 +141,26 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
             time.sleep(0.5)
             background_cycle = background.copy()
             draw = ImageDraw.Draw(background_cycle)
-            draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', align="right", font=temp_font, fill="RED" if heat_is_on.value else "GRAY")
 
             if timer_is_on.value:
                 draw.text((40, 25), str(timer.value), align="center", font=timer_font, fill="YELLOW")
+
+            if power_button_press.is_set():
+                draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', align="right", font=temp_font, fill="RED" if heat_is_on.value else "GRAY")
+                background.paste(power_on_icon, (1, 24))
+            else:
+                background.paste(power_off_icon, (1, 24))
+                # background.paste(gaggia_logo, (37, 5))
+
+            if brew_button_press.is_set():
+                background.paste(brew_on_icon, (1, 54))
+            else:
+                background.paste(brew_off_icon, (1, 54))
+
+            if steam_button_press.is_set():
+                background.paste(steam_on_icon, (1, 84))
+            else:
+                background.paste(steam_off_icon, (1, 84))
 
             background_cycle = background_cycle.rotate(180)
             lcd.LCD_ShowImage(background_cycle, 0, 0)
@@ -144,14 +171,65 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on):
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def heatButtonPress(heat_is_on):
+def powerButtonPress(channel):
     try:
-        time.sleep(0.05)
-        heat_is_on.value = True
+        if power_button_press.is_set():
+            logger.info('Power Off')
+            power_button_press.clear()
+
+            # Turn off the machine here...
+        else:
+            logger.info('Power On')
+            power_button_press.set()
+
+            # Turn on the machine here...
 
     except:
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+        logger.error(
+            ''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+
+
+def brewButtonPress(timer_is_on):
+    try:
+        if power_button_press.is_set():
+            if brew_button_press.is_set():
+                logger.info('Brew Off')
+                brew_button_press.clear()
+                timer_is_on.value = False
+
+                # Turn off the pump here...
+            else:
+                logger.info('Brew On')
+                brew_button_press.set()
+
+                timer_is_on.value = True
+                # Turn on the pump here...
+
+    except:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        logger.error(
+            ''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+
+
+def steamButtonPress(channel):
+    try:
+        if power_button_press.is_set():
+            if steam_button_press.is_set():
+                logger.info('Steam Off')
+                steam_button_press.clear()
+
+                # Turn off the steam here...
+            else:
+                logger.info('Steam On')
+                steam_button_press.set()
+
+                # Turn on the steam here...
+
+    except:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        logger.error(
+            ''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
 def cleanup():
@@ -162,14 +240,25 @@ def cleanup():
 
 
 if __name__ == '__main__':
+
+
     try:
         logger_init()
 
         # Heat is on
         heat_is_on = Value('b', False)
 
+        # Button press events
+        power_button_press = Event()
+        brew_button_press = Event()
+        steam_button_press = Event()
+
+        GPIO.add_event_detect(gpio_btn_power, GPIO.RISING, callback=powerButtonPress, bouncetime=300)
+        GPIO.add_event_detect(gpio_btn_brew, GPIO.RISING, callback=lambda x: brewButtonPress(timer_is_on), bouncetime=300)
+        GPIO.add_event_detect(gpio_btn_steam, GPIO.RISING, callback=steamButtonPress, bouncetime=300)
+
         # Timer Update Loop
-        timer_is_on = Value('b', True)
+        timer_is_on = Value('b', False)
         timer_secs = Value('i', 0)
         timer_lock = Lock()
         timerupdateproc = Process(target=timerupdateproc, args=(timer_is_on, timer_secs, timer_lock))
@@ -180,7 +269,7 @@ if __name__ == '__main__':
         tempupdateproc = Process(target=tempupdateproc, args=(curr_temp, temp_lock))
 
         # LCD Painting Loop
-        lcdpainterproc = Process(target=lcdpainterproc, args=(curr_temp, timer_secs, heat_is_on, timer_is_on))
+        lcdpainterproc = Process(target=lcdpainterproc, args=(curr_temp, timer_secs, heat_is_on, timer_is_on, power_button_press, brew_button_press, steam_button_press))
 
         timerupdateproc.start()
         tempupdateproc.start()
@@ -190,8 +279,8 @@ if __name__ == '__main__':
         tempupdateproc.join()
         lcdpainterproc.join()
 
-        GPIO.add_event_detect(gpio_btn_heat_sig, GPIO.RISING, callback=lambda x: heatButtonPress(heat_is_on), bouncetime=200)
-        GPIO.add_event_detect(gpio_btn_pump_sig, GPIO.RISING, callback=catchButton, bouncetime=250)
+        while True:
+            time.sleep(1)
 
     except KeyboardInterrupt:
         cleanup()
