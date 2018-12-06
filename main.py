@@ -1,7 +1,7 @@
 from lcd import LCD_1in44, LCD_Config
 from PIL import Image, ImageDraw, ImageOps, ImageFont, ImageColor
 
-import os, logging, sys, traceback, glob
+import os, logging, multiprocessing_logging, sys, traceback, glob
 from random import randint
 import multiprocessing
 from multiprocessing import Process, Pipe, Queue, Value, Lock, current_process
@@ -23,21 +23,18 @@ GPIO.setup(gpio_pump, GPIO.OUT)
 GPIO.setup(gpio_btn_heat_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(gpio_btn_pump_sig, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+multiprocessing_logging.install_mp_handler(logger)
 
 detachedmode = False
 if("--detached" in  sys.argv):
     detachedmode = True
-
-
-def logger_init():
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.info('******************************************')
-    logger.info('Starting up...')
 
 
 def timerupdateproc(timer_is_on, timer, lock):
