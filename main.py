@@ -33,6 +33,24 @@ if("--detached" in  sys.argv):
     detachedmode = True
 
 
+class mem:  # global class
+    lcd_connection = Pipe()
+
+
+class globalvars(object):
+    def __init__(self, initval = 0):
+        self.temperature = multiprocessing.Value("i", initval)
+
+    def set_temp(self, n=0):
+        with self.temperature.get_lock():
+            self.temperature.value = n
+
+    @property
+    def temp(self):
+        with self.temperature.get_lock():
+            return self.temperature.value
+
+
 def logger_init():
     logger.setLevel(logging.DEBUG)
 
@@ -113,7 +131,7 @@ def tempupdateproc(temp, lock):
         logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def lcdpainterproc(temp, timer, heat_is_on, timer_is_on, power_button_press, brew_button_press, steam_button_press):
+def lcdpainterproc(lcd_child_conn):
     p = current_process()
     logger = logging.getLogger("mypispresso").getChild("lcdpainterproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
@@ -136,43 +154,63 @@ def lcdpainterproc(temp, timer, heat_is_on, timer_is_on, power_button_press, bre
     temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 25)
     timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 60)
 
-    try:
-        while (True):
-            time.sleep(0.5)
-            background_cycle = background.copy()
-            draw = ImageDraw.Draw(background_cycle)
+    def show_temp ():
+        draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
 
-            if timer_is_on.value:
-                draw.text((40, 25), str(timer.value), align="center", font=timer_font, fill="YELLOW")
+    def show_timer ():
+        draw.text((40, 25), str(timer.value), font=timer_font, fill="YELLOW")
 
-            if power_button_press.is_set():
-                draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', align="right", font=temp_font, fill="RED" if heat_is_on.value else "GRAY")
-                background.paste(power_on_icon, (1, 24))
-            else:
-                background.paste(power_off_icon, (1, 24))
-                # background.paste(gaggia_logo, (37, 5))
+    def power_is_on ():
+        background.paste(power_on_icon, (1, 24))
 
-            if brew_button_press.is_set():
-                background.paste(brew_on_icon, (1, 54))
-            else:
-                background.paste(brew_off_icon, (1, 54))
+    def steam_is_on ():
+        background.paste(steam_on_icon, (1, 84))
 
-            if steam_button_press.is_set():
-                background.paste(steam_on_icon, (1, 84))
-            else:
-                background.paste(steam_off_icon, (1, 84))
+    settings_dict = {
+        "show_temp" : show_temp(value),
+        "show_timer" : show_timer(value),
+        "boiler_is_on" : boiler_is_on(value),
+        "power_is_on" : power_is_on(value),
+        "pump_is_on" : pump_is_on(value),
+        "steam_is_on" : steam_is_on(value),
+    }
 
-            background_cycle = background_cycle.rotate(180)
-            lcd.LCD_ShowImage(background_cycle, 0, 0)
-            LCD_Config.Driver_Delay_ms(500)
-            background_cycle = None
-    except:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+    while (True):
+        time.sleep(0.25)
+
+        while lcd_child_conn.poll():
+            try:
+                lcdstatusdict = lcd_child_conn.recv()
+                background_cycle = background.copy()
+                draw = ImageDraw.Draw(background_cycle)
+
+                if 'show_temp' in lcdstatusdict:
+                    draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
+                if 'show_timer' in lcdstatusdict:
+                    draw.text((40, 25), str(timer.value), font=timer_font, fill="YELLOW")
+                if 'power_is_on' in lcdstatusdict:
+                    if lcdstatusdict['power_is_on']
+                        background.paste(power_on_icon, (1, 24))
+                    else:
+                        background.paste(power_off_icon, (1, 24))
+                if 'steam_is_on' in lcdstatusdict:
+                    if lcdstatusdict['steam_is_on']
+                        background.paste(steam_on_icon, (1, 84))
+                    else:
+                        background.paste(steam_off_icon, (1, 84))
+
+                background_cycle = background_cycle.rotate(180)
+                lcd.LCD_ShowImage(background_cycle, 0, 0)
+                LCD_Config.Driver_Delay_ms(500)
+                background_cycle = None
+            except:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
 def powerButtonPress(channel):
     try:
+        mem.lcd_connection.send({"show_temp": True, "show_timer": False, "power_is_on": True})
         if power_button_press.is_set():
             logger.info('Power Off')
             power_button_press.clear()
@@ -268,8 +306,10 @@ if __name__ == '__main__':
         temp_lock = Lock()
         tempupdateproc = Process(target=tempupdateproc, args=(curr_temp, temp_lock))
 
-        # LCD Painting Loop
-        lcdpainterproc = Process(target=lcdpainterproc, args=(curr_temp, timer_secs, heat_is_on, timer_is_on, power_button_press, brew_button_press, steam_button_press))
+        # LCD Process
+        lcd_parent_conn, lcd_child_conn = Pipe()
+        mem.lcd_connection = lcd_parent_conn
+        lcdpainterproc = Process(target=lcdpainterproc, args=(lcd_child_conn,))
 
         timerupdateproc.start()
         tempupdateproc.start()
