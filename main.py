@@ -164,9 +164,9 @@ def lcdpainterproc(lcd_child_conn):
                 draw = ImageDraw.Draw(background_cycle)
 
                 if 'show_temp' in lcdstatusdict:
-                    draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
+                    draw.text((73, 1), str(123) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
                 if 'show_timer' in lcdstatusdict:
-                    draw.text((40, 25), str(timer.value), font=timer_font, fill="YELLOW")
+                    draw.text((40, 25), str(3), font=timer_font, fill="YELLOW")
                 if 'power_is_on' in lcdstatusdict:
                     if lcdstatusdict['power_is_on']:
                         background.paste(power_on_icon, (1, 24))
