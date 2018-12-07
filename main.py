@@ -35,6 +35,7 @@ if("--detached" in  sys.argv):
 
 class mem:  # global class
     lcd_connection = Pipe()
+    timer_connection = Pipe()
 
 
 class globalvars(object):
@@ -70,22 +71,21 @@ def logger_init():
     logger.info('Starting up...')
 
 
-def timerupdateproc(timer_is_on, timer, lock):
+def refreshlcd(payload="refresh"):
+    mem.lcd_connection.send(payload)
+
+
+def timer(timer_child_conn):
     p = current_process()
-    logger = logging.getLogger("mypispresso").getChild("tempupdateproc")
+    logger = logging.getLogger("mypispresso").getChild("timerproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
 
-    try:
-        while (True):
-            if timer_is_on.value:
-                time.sleep(1)
-                with lock:
-                    timer.value += 1
-            else:
-                timer.value = 1
-    except:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        logger.error(''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+    timer = 0
+
+    while (True):
+        timer += 1
+        refreshlcd("time=" + str(timer))
+        time.sleep(1)
 
 
 def read_temp_raw():
@@ -141,8 +141,9 @@ def lcdpainterproc(lcd_child_conn):
     # Init LCD
     lcd_scandir = LCD_1in44.SCAN_DIR_DFT  # SCAN_DIR_DFT = D2U_L2R
     lcd.LCD_Init(lcd_scandir)
+    lcd.LCD_Clear()
+    initial_load = True
 
-    background = Image.new("RGB", (lcd.width, lcd.height), "BLACK")
     # gaggia_logo = Image.open('lcd/gaggia.png').convert('RGBA').resize((80, 121))
     power_on_icon = Image.open('lcd/power_button_on.png').convert('RGBA').resize((18, 18))
     power_off_icon = Image.open('lcd/power_button_off.png').convert('RGBA').resize((18, 18))
@@ -154,33 +155,50 @@ def lcdpainterproc(lcd_child_conn):
     temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 25)
     timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 60)
 
-    while (True):
+    background = Image.new("RGB", (lcd.width, lcd.height), "BLACK")
+
+    while True:
+
+        if initial_load:
+            background.paste(power_off_icon, (1, 24))
+            background.paste(brew_off_icon, (1, 54))
+            background.paste(steam_off_icon, (1, 84))
+            lcd.LCD_ShowImage(background.rotate(180), 0, 0)
+            initial_load = False
+
         time.sleep(0.25)
 
         while lcd_child_conn.poll():
             try:
-                lcdstatusdict = lcd_child_conn.recv()
+                recv = lcd_child_conn.recv()
                 background_cycle = background.copy()
                 draw = ImageDraw.Draw(background_cycle)
 
-                if 'show_temp' in lcdstatusdict:
+                # Show Timer
+                if brew_button.is_set():
+                    if "time" in recv:
+                        draw.text((40, 25), str(recv.split('=')[1]), font=timer_font, fill="YELLOW")
+
+                # Power Button
+                if power_button.is_set():
+                    background_cycle.paste(power_on_icon, (1, 24))
+
+                    # Show Timer
                     draw.text((73, 1), str(123) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
-                if 'show_timer' in lcdstatusdict:
-                    draw.text((40, 25), str(3), font=timer_font, fill="YELLOW")
-                if 'power_is_on' in lcdstatusdict:
-                    if lcdstatusdict['power_is_on']:
-                        background.paste(power_on_icon, (1, 24))
-                    else:
-                        background.paste(power_off_icon, (1, 24))
                 else:
-                    background.paste(power_off_icon, (1, 24))
-                if 'steam_is_on' in lcdstatusdict:
-                    if lcdstatusdict['steam_is_on']:
-                        background.paste(steam_on_icon, (1, 84))
-                    else:
-                        background.paste(steam_off_icon, (1, 84))
+                    background_cycle.paste(power_off_icon, (1, 24))
+
+                # Brew Button
+                if brew_button.is_set():
+                    background_cycle.paste(brew_on_icon, (1, 54))
                 else:
-                    background.paste(steam_off_icon, (1, 84))
+                    background_cycle.paste(brew_off_icon, (1, 54))
+
+                # Steam Button
+                if steam_button.is_set():
+                    background_cycle.paste(steam_on_icon, (1, 84))
+                else:
+                    background_cycle.paste(steam_off_icon, (1, 84))
 
                 background_cycle = background_cycle.rotate(180)
                 lcd.LCD_ShowImage(background_cycle, 0, 0)
@@ -193,15 +211,16 @@ def lcdpainterproc(lcd_child_conn):
 
 def powerButtonPress(channel):
     try:
-        mem.lcd_connection.send({"show_temp": True, "show_timer": False, "power_is_on": True})
-        if power_button_press.is_set():
+        if power_button.is_set():
             logger.info('Power Off')
-            power_button_press.clear()
+            power_button.clear()
+            refreshlcd()
 
             # Turn off the machine here...
         else:
             logger.info('Power On')
-            power_button_press.set()
+            power_button.set()
+            refreshlcd()
 
             # Turn on the machine here...
 
@@ -211,20 +230,27 @@ def powerButtonPress(channel):
             ''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
 
-def brewButtonPress(timer_is_on):
+def brewButtonPress(channel):
     try:
-        if power_button_press.is_set():
-            if brew_button_press.is_set():
+        if power_button.is_set():
+            if brew_button.is_set():
                 logger.info('Brew Off')
-                brew_button_press.clear()
-                timer_is_on.value = False
+                brew_button.clear()
+                refreshlcd()
 
                 # Turn off the pump here...
             else:
                 logger.info('Brew On')
-                brew_button_press.set()
+                brew_button.set()
 
-                timer_is_on.value = True
+                # Timer Process
+                timer_parent_conn, timer_child_conn = Pipe()
+                mem.timer_connection = timer_parent_conn
+                timerproc = Process(target=timer, args=(timer_child_conn,))
+                timerproc.start()
+
+                refreshlcd()
+
                 # Turn on the pump here...
 
     except:
@@ -234,34 +260,27 @@ def brewButtonPress(timer_is_on):
 
 
 def steamButtonPress(channel):
-    try:
-        if power_button_press.is_set():
-            if steam_button_press.is_set():
-                logger.info('Steam Off')
-                steam_button_press.clear()
+    if power_button.is_set():
+        if steam_button.is_set():
+            logger.info('Steam Off')
+            steam_button.clear()
+            refreshlcd()
 
-                # Turn off the steam here...
-            else:
-                logger.info('Steam On')
-                steam_button_press.set()
+            # Turn off the steam here...
+        else:
+            logger.info('Steam On')
+            steam_button.set()
+            refreshlcd()
 
-                # Turn on the steam here...
-
-    except:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        logger.error(
-            ''.join('!! ' + line for line in traceback.format_exception(exc_type, exc_value, exc_traceback)))
+            # Turn on the steam here...
 
 
 def cleanup():
     logger.info("Shutting down...")
-    GPIO.setwarnings(False)
-    GPIO.setmode(GPIO.BCM)
     GPIO.cleanup()
 
 
 if __name__ == '__main__':
-
 
     try:
         logger_init()
@@ -270,19 +289,13 @@ if __name__ == '__main__':
         heat_is_on = Value('b', False)
 
         # Button press events
-        power_button_press = Event()
-        brew_button_press = Event()
-        steam_button_press = Event()
+        power_button = Event()
+        brew_button = Event()
+        steam_button = Event()
 
         GPIO.add_event_detect(gpio_btn_power, GPIO.RISING, callback=powerButtonPress, bouncetime=300)
-        GPIO.add_event_detect(gpio_btn_brew, GPIO.RISING, callback=lambda x: brewButtonPress(timer_is_on), bouncetime=300)
+        GPIO.add_event_detect(gpio_btn_brew, GPIO.RISING, callback=brewButtonPress, bouncetime=300)
         GPIO.add_event_detect(gpio_btn_steam, GPIO.RISING, callback=steamButtonPress, bouncetime=300)
-
-        # Timer Update Loop
-        timer_is_on = Value('b', False)
-        timer_secs = Value('i', 0)
-        timer_lock = Lock()
-        timerupdateproc = Process(target=timerupdateproc, args=(timer_is_on, timer_secs, timer_lock))
 
         # Temperature Update Loop
         curr_temp = Value('i', 0)
@@ -294,16 +307,8 @@ if __name__ == '__main__':
         mem.lcd_connection = lcd_parent_conn
         lcdpainterproc = Process(target=lcdpainterproc, args=(lcd_child_conn,))
 
-        timerupdateproc.start()
         tempupdateproc.start()
         lcdpainterproc.start()
-
-        timerupdateproc.join()
-        tempupdateproc.join()
-        lcdpainterproc.join()
-
-        while True:
-            time.sleep(1)
 
     except KeyboardInterrupt:
         cleanup()
