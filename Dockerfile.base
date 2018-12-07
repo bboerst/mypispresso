@@ -1,5 +1,5 @@
 # Manually built and pushed Docker Hub as bboerst/rpi-qemu-alpine-python
-FROM arm32v6/python:2-alpine
+FROM arm32v6/python:3-alpine
 
 RUN apk add --no-cache \
 	curl \
