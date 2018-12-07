@@ -172,11 +172,15 @@ def lcdpainterproc(lcd_child_conn):
                         background.paste(power_on_icon, (1, 24))
                     else:
                         background.paste(power_off_icon, (1, 24))
+                else:
+                    background.paste(power_off_icon, (1, 24))
                 if 'steam_is_on' in lcdstatusdict:
                     if lcdstatusdict['steam_is_on']:
                         background.paste(steam_on_icon, (1, 84))
                     else:
                         background.paste(steam_off_icon, (1, 84))
+                else:
+                    background.paste(steam_off_icon, (1, 84))
 
                 background_cycle = background_cycle.rotate(180)
                 lcd.LCD_ShowImage(background_cycle, 0, 0)
