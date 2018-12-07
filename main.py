@@ -154,27 +154,6 @@ def lcdpainterproc(lcd_child_conn):
     temp_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 25)
     timer_font = ImageFont.truetype("/usr/src/app/lcd/arial.ttf", 60)
 
-    def show_temp ():
-        draw.text((73, 1), str(temp.value) + u'\N{DEGREE SIGN}', font=temp_font, fill="WHITE")
-
-    def show_timer ():
-        draw.text((40, 25), str(timer.value), font=timer_font, fill="YELLOW")
-
-    def power_is_on ():
-        background.paste(power_on_icon, (1, 24))
-
-    def steam_is_on ():
-        background.paste(steam_on_icon, (1, 84))
-
-    settings_dict = {
-        "show_temp" : show_temp(value),
-        "show_timer" : show_timer(value),
-        "boiler_is_on" : boiler_is_on(value),
-        "power_is_on" : power_is_on(value),
-        "pump_is_on" : pump_is_on(value),
-        "steam_is_on" : steam_is_on(value),
-    }
-
     while (True):
         time.sleep(0.25)
 
