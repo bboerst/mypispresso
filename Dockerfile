@@ -1,4 +1,4 @@
-FROM bboerst/rpi-qemu-alpine-python:2
+FROM bboerst/rpi-qemu-alpine-python:3
 
 WORKDIR /usr/src/app
 
