@@ -1,13 +1,11 @@
-from lcd import LCD_1in44, LCD_Config
+from lcd.LCD_1in44 import *
 from PIL import Image, ImageDraw, ImageOps, ImageFont, ImageColor
 
 import os, logging, sys, traceback, glob
 from random import randint
 import multiprocessing
-from multiprocessing import Process, Pipe, Queue, Event, Value, Lock, current_process
-from subprocess import Popen, PIPE, call, signal
+from multiprocessing import Process, Pipe, Event, Value, Lock, current_process
 import time
-from functools import partial
 
 import RPi.GPIO as GPIO
 
@@ -136,12 +134,12 @@ def lcdpainterproc(lcd_child_conn):
     logger = logging.getLogger("mypispresso").getChild("lcdpainterproc")
     logger.info('Starting:' + p.name + ":" + str(p.pid))
 
-    lcd = LCD_1in44.LCD()
+    lcd = LCD()
 
     # Init LCD
-    lcd_scandir = LCD_1in44.SCAN_DIR_DFT  # SCAN_DIR_DFT = D2U_L2R
+    lcd_scandir = LCD.LCD_Scan_Dir  # SCAN_DIR_DFT = D2U_L2R
     lcd.LCD_Init(lcd_scandir)
-    lcd.LCD_Clear()
+    LCD.LCD_Clear()
     initial_load = True
 
     # gaggia_logo = Image.open('lcd/gaggia.png').convert('RGBA').resize((80, 121))
@@ -163,7 +161,7 @@ def lcdpainterproc(lcd_child_conn):
             background.paste(power_off_icon, (1, 24))
             background.paste(brew_off_icon, (1, 54))
             background.paste(steam_off_icon, (1, 84))
-            lcd.LCD_ShowImage(background.rotate(180), 0, 0)
+            LCD.LCD_ShowImage(background.rotate(180), 0, 0)
             initial_load = False
 
         time.sleep(0.25)
@@ -201,8 +199,8 @@ def lcdpainterproc(lcd_child_conn):
                     background_cycle.paste(steam_off_icon, (1, 84))
 
                 background_cycle = background_cycle.rotate(180)
-                lcd.LCD_ShowImage(background_cycle, 0, 0)
-                LCD_Config.Driver_Delay_ms(500)
+                LCD.LCD_ShowImage(background_cycle, 0, 0)
+                LCD.Driver_Delay_ms(500)
                 background_cycle = None
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()

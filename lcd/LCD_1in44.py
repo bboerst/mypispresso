@@ -25,7 +25,7 @@
  # THE SOFTWARE.
  #
 
-import LCD_Config
+from .LCD_Config import Driver_Delay_ms, LCD_RST_PIN, LCD_DC_PIN, SPI_Write_Byte, LCD_BL_PIN, GPIO_Init
 import RPi.GPIO as GPIO
 import time
 import numpy as np
@@ -68,27 +68,27 @@ class LCD:
 
 	"""    Hardware reset     """
 	def  LCD_Reset(self):
-		GPIO.output(LCD_Config.LCD_RST_PIN, GPIO.HIGH)
-		LCD_Config.Driver_Delay_ms(100)
-		GPIO.output(LCD_Config.LCD_RST_PIN, GPIO.LOW)
-		LCD_Config.Driver_Delay_ms(100)
-		GPIO.output(LCD_Config.LCD_RST_PIN, GPIO.HIGH)
-		LCD_Config.Driver_Delay_ms(100)
+		GPIO.output(LCD_RST_PIN, GPIO.HIGH)
+		Driver_Delay_ms(100)
+		GPIO.output(LCD_RST_PIN, GPIO.LOW)
+		Driver_Delay_ms(100)
+		GPIO.output(LCD_RST_PIN, GPIO.HIGH)
+		Driver_Delay_ms(100)
 
 	"""    Write register address and data     """
 	def  LCD_WriteReg(self, Reg):
-		GPIO.output(LCD_Config.LCD_DC_PIN, GPIO.LOW)
-		LCD_Config.SPI_Write_Byte([Reg])
+		GPIO.output(LCD_DC_PIN, GPIO.LOW)
+		SPI_Write_Byte([Reg])
 
 	def LCD_WriteData_8bit(self, Data):
-		GPIO.output(LCD_Config.LCD_DC_PIN, GPIO.HIGH)
-		LCD_Config.SPI_Write_Byte([Data])
+		GPIO.output(LCD_DC_PIN, GPIO.HIGH)
+		SPI_Write_Byte([Data])
 
 	def LCD_WriteData_NLen16Bit(self, Data, DataLen):
-		GPIO.output(LCD_Config.LCD_DC_PIN, GPIO.HIGH)
+		GPIO.output(LCD_DC_PIN, GPIO.HIGH)
 		for i in range(0, DataLen):
-			LCD_Config.SPI_Write_Byte([Data >> 8])
-			LCD_Config.SPI_Write_Byte([Data & 0xff])
+			SPI_Write_Byte([Data >> 8])
+			SPI_Write_Byte([Data & 0xff])
 		
 	"""    Common register initialization    """
 	def LCD_InitReg(self):
@@ -240,11 +240,11 @@ class LCD:
 	#			initialization
 	#********************************************************************************/
 	def LCD_Init(self, Lcd_ScanDir):
-		if (LCD_Config.GPIO_Init() != 0):
+		if (GPIO_Init() != 0):
 			return -1
 		
 		#Turn on the backlight
-		GPIO.output(LCD_Config.LCD_BL_PIN,GPIO.HIGH)
+		GPIO.output(LCD_BL_PIN,GPIO.HIGH)
 		
 		#Hardware reset
 		self.LCD_Reset()
@@ -254,11 +254,11 @@ class LCD:
 		
 		#Set the display scan and color transfer modes	
 		self.LCD_SetGramScanWay(Lcd_ScanDir)
-		LCD_Config.Driver_Delay_ms(200)
+		Driver_Delay_ms(200)
 		
 		#sleep out
 		self.LCD_WriteReg(0x11)
-		LCD_Config.Driver_Delay_ms(120)
+		Driver_Delay_ms(120)
 		
 		#Turn on the LCD display
 		self.LCD_WriteReg(0x29)
@@ -292,9 +292,9 @@ class LCD:
 		#hello
 		_buffer = [0xff]*(self.width * self.height * 2)
 		self.LCD_SetWindows(0, 0, self.width, self.height)
-		GPIO.output(LCD_Config.LCD_DC_PIN, GPIO.HIGH)
+		GPIO.output(LCD_DC_PIN, GPIO.HIGH)
 		for i in range(0,len(_buffer),4096):
-			LCD_Config.SPI_Write_Byte(_buffer[i:i+4096])
+			SPI_Write_Byte(_buffer[i:i+4096])
 
 	def LCD_ShowImage(self,Image,Xstart,Ystart):
 		if (Image == None):
@@ -309,6 +309,6 @@ class LCD:
 		pix[...,[1]] = np.add(np.bitwise_and(np.left_shift(img[...,[1]],3),0xE0),np.right_shift(img[...,[2]],3))
 		pix = pix.flatten().tolist()
 		self.LCD_SetWindows(0, 0, self.width , self.height)
-		GPIO.output(LCD_Config.LCD_DC_PIN, GPIO.HIGH)
+		GPIO.output(LCD_DC_PIN, GPIO.HIGH)
 		for i in range(0,len(pix),4096):
-			LCD_Config.SPI_Write_Byte(pix[i:i+4096])
+			SPI_Write_Byte(pix[i:i+4096])
