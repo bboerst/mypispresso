@@ -1,4 +1,5 @@
 from lcd.LCD_1in44 import *
+from lcd.LCD_Config import *
 from PIL import Image, ImageDraw, ImageOps, ImageFont, ImageColor
 
 import os, logging, sys, traceback, glob
@@ -137,9 +138,9 @@ def lcdpainterproc(lcd_child_conn):
     lcd = LCD()
 
     # Init LCD
-    lcd_scandir = LCD.LCD_Scan_Dir  # SCAN_DIR_DFT = D2U_L2R
+    lcd_scandir = lcd.LCD_Scan_Dir  # SCAN_DIR_DFT = D2U_L2R
     lcd.LCD_Init(lcd_scandir)
-    LCD.LCD_Clear()
+    lcd.LCD_Clear()
     initial_load = True
 
     # gaggia_logo = Image.open('lcd/gaggia.png').convert('RGBA').resize((80, 121))
@@ -161,7 +162,7 @@ def lcdpainterproc(lcd_child_conn):
             background.paste(power_off_icon, (1, 24))
             background.paste(brew_off_icon, (1, 54))
             background.paste(steam_off_icon, (1, 84))
-            LCD.LCD_ShowImage(background.rotate(180), 0, 0)
+            lcd.LCD_ShowImage(background.rotate(180), 0, 0)
             initial_load = False
 
         time.sleep(0.25)
@@ -199,8 +200,8 @@ def lcdpainterproc(lcd_child_conn):
                     background_cycle.paste(steam_off_icon, (1, 84))
 
                 background_cycle = background_cycle.rotate(180)
-                LCD.LCD_ShowImage(background_cycle, 0, 0)
-                LCD.Driver_Delay_ms(500)
+                lcd.LCD_ShowImage(background_cycle, 0, 0)
+                Driver_Delay_ms(500)
                 background_cycle = None
             except:
                 exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -231,22 +232,22 @@ def powerButtonPress(channel):
 def brewButtonPress(channel):
     try:
         if power_button.is_set():
+            # Timer Process
+            timer_parent_conn, timer_child_conn = Pipe()
+            timerproc = Process(target=timer, args=(timer_child_conn,))
+
             if brew_button.is_set():
                 logger.info('Brew Off')
                 brew_button.clear()
+                timer_child_conn.close()
                 refreshlcd()
 
                 # Turn off the pump here...
             else:
                 logger.info('Brew On')
                 brew_button.set()
-
-                # Timer Process
-                timer_parent_conn, timer_child_conn = Pipe()
                 mem.timer_connection = timer_parent_conn
-                timerproc = Process(target=timer, args=(timer_child_conn,))
                 timerproc.start()
-
                 refreshlcd()
 
                 # Turn on the pump here...
