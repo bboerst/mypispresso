@@ -14,6 +14,7 @@ RUN curl -L -o /usr/bin/qemu-arm-static https://github.com/multiarch/qemu-user-s
     && chmod +x /usr/bin/qemu-*
 
 RUN pip install --no-cache-dir rpi.gpio spidev numpy pillow
+RUN pip install --no-cache-dir simple-pid
 
 CMD ["python"]
 
